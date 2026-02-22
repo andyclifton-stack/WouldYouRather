@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Would You Rather</title>
+  <meta name="description"
+    content="A real-time two-player Would You Rather game. Create a room, share the code, and see if you think alike!" />
+  <meta property="og:title" content="Would You Rather" />
+  <meta property="og:description" content="Play Would You Rather with a friend in real-time! Do you think alike?" />
+  <meta property="og:type" content="website" />
+  <meta name="theme-color" content="#7c3aed" />
+
+  <!-- Google Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap"
+    rel="stylesheet" />
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+  <link rel="stylesheet" href="/style.css" />
+</head>
+
+<body>
+
+  <!-- ═══════════ FLOATING PARTICLES (background) ═══════════ -->
+  <div id="particles" aria-hidden="true"></div>
+
+  <!-- ═══════════ MUTE BUTTON ═══════════ -->
+  <button id="mute-btn" class="mute-toggle" aria-label="Toggle audio">
+    <span class="mute-icon">🔊</span>
+  </button>
+
+  <!-- ═══════════ SCREEN: SPLASH ═══════════ -->
+  <section id="screen-splash" class="screen active">
+    <div class="splash-content">
+      <div class="splash-logo">
+        <span class="splash-emoji">🤔</span>
+        <h1 class="splash-title">Would You<br /><span class="highlight">Rather</span></h1>
+        <p class="splash-sub">Think Alike?</p>
+      </div>
+      <div class="splash-loader">
+        <div class="loader-bar"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ SCREEN: LOBBY ═══════════ -->
+  <section id="screen-lobby" class="screen">
+    <div class="lobby-container">
+      <h2 class="section-title">Would You Rather</h2>
+
+      <div class="lobby-tabs">
+        <button class="tab-btn active" data-tab="create" id="tab-create">Create Game</button>
+        <button class="tab-btn" data-tab="join" id="tab-join">Join Game</button>
+      </div>
+
+      <!-- CREATE TAB -->
+      <div id="panel-create" class="tab-panel active">
+        <div class="glass-card">
+          <label class="field-label">Choose a Topic</label>
+          <select id="topic-select" class="styled-select">
+            <!-- Populated by JS -->
+          </select>
+
+          <label class="field-label">Number of Rounds</label>
+          <div class="slider-row">
+            <input type="range" id="round-slider" min="3" max="15" value="5" class="styled-slider" />
+            <span id="round-count" class="round-badge">5</span>
+          </div>
+
+          <label class="field-label">Your Name</label>
+          <input type="text" id="player-name-create" class="styled-input" placeholder="Enter your name..."
+            maxlength="12" />
+
+          <button id="btn-create-game" class="primary-btn">
+            <span>Create Game</span>
+            <svg class="btn-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- JOIN TAB -->
+      <div id="panel-join" class="tab-panel">
+        <div class="glass-card">
+          <label class="field-label">Enter Game Code</label>
+          <div class="code-input-row">
+            <input type="text" id="join-code-1" class="code-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" />
+            <input type="text" id="join-code-2" class="code-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" />
+            <input type="text" id="join-code-3" class="code-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" />
+            <input type="text" id="join-code-4" class="code-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" />
+          </div>
+
+          <label class="field-label">Your Name</label>
+          <input type="text" id="player-name-join" class="styled-input" placeholder="Enter your name..."
+            maxlength="12" />
+
+          <button id="btn-join-game" class="primary-btn join-btn">
+            <span>Join Game</span>
+            <svg class="btn-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ SCREEN: WAITING ROOM ═══════════ -->
+  <section id="screen-waiting" class="screen">
+    <div class="waiting-container">
+      <h2 class="section-title">Waiting Room</h2>
+      <div class="room-code-display">
+        <span class="code-label">GAME CODE</span>
+        <div id="display-code" class="big-code">----</div>
+      </div>
+
+      <div class="players-status">
+        <div class="player-card p1">
+          <div class="player-avatar">👤</div>
+          <div id="p1-name" class="player-name">Waiting...</div>
+          <div id="p1-status" class="player-ready">Not Ready</div>
+        </div>
+        <div class="vs-divider">VS</div>
+        <div class="player-card p2">
+          <div class="player-avatar">👤</div>
+          <div id="p2-name" class="player-name">Waiting...</div>
+          <div id="p2-status" class="player-ready">Not Ready</div>
+        </div>
+      </div>
+
+      <button id="btn-share-whatsapp" class="whatsapp-btn">
+        <svg class="wa-icon" viewBox="0 0 24 24" fill="currentColor">
+          <path
+            d="M17.472 14.382c-.297-.15-1.758-.868-2.031-.967-.273-.099-.472-.149-.67.15-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.019-.458.13-.606.134-.133.297-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.372-.025-.52-.074-.15-.669-1.612-.916-2.207-.242-.579-.487-.5-.67-.51-.173-.008-.372-.01-.571-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.29.173-1.414-.074-.124-.272-.198-.571-.347z" />
+          <path
+            d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.75.75 0 0 0 .917.918l4.458-1.495A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.4 0-4.637-.85-6.382-2.27l-.446-.37-3.112 1.044 1.044-3.112-.37-.446A9.935 9.935 0 0 1 2 12C2 6.486 6.486 2 12 2s10 4.486 10 10-4.486 10-10 10z" />
+        </svg>
+        <span>Share via WhatsApp</span>
+      </button>
+
+      <p class="waiting-hint">Share the code with your opponent to start!</p>
+    </div>
+  </section>
+
+  <!-- ═══════════ SCREEN: GAME ROUND ═══════════ -->
+  <section id="screen-game" class="screen">
+    <!-- AI Background Image -->
+    <div id="game-bg" class="game-background"></div>
+
+    <div class="game-header">
+      <div class="round-indicator">
+        <span id="round-label">Round 1 / 5</span>
+      </div>
+      <div id="countdown-ring" class="countdown-ring">
+        <svg viewBox="0 0 100 100">
+          <circle class="ring-bg" cx="50" cy="50" r="45" />
+          <circle id="ring-progress" class="ring-fg" cx="50" cy="50" r="45" />
+        </svg>
+        <span id="countdown-num" class="countdown-num">5</span>
+      </div>
+    </div>
+
+    <div class="split-choices">
+      <button id="choice-a" class="choice-panel choice-left" data-choice="A">
+        <div class="choice-content">
+          <span class="choice-label">A</span>
+          <div class="choice-img-wrap">
+            <div class="img-shimmer" id="shimmer-a"></div>
+            <img id="img-a" class="choice-img" alt="" />
+          </div>
+          <h3 id="option-a-text" class="choice-text">Option A</h3>
+        </div>
+        <div class="choice-locked-badge">🔒 Locked In</div>
+      </button>
+      <div class="choice-divider">
+        <span class="or-badge">OR</span>
+      </div>
+      <button id="choice-b" class="choice-panel choice-right" data-choice="B">
+        <div class="choice-content">
+          <span class="choice-label">B</span>
+          <div class="choice-img-wrap">
+            <div class="img-shimmer" id="shimmer-b"></div>
+            <img id="img-b" class="choice-img" alt="" />
+          </div>
+          <h3 id="option-b-text" class="choice-text">Option B</h3>
+        </div>
+        <div class="choice-locked-badge">🔒 Locked In</div>
+      </button>
+    </div>
+
+    <div class="game-footer">
+      <div id="opponent-status" class="opponent-indicator">
+        <span class="opp-dot"></span>
+        <span id="opp-status-text">Opponent is choosing...</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ SCREEN: REVEAL ═══════════ -->
+  <section id="screen-reveal" class="screen">
+    <div class="reveal-container">
+      <div id="reveal-result-tag" class="reveal-tag">MATCH!</div>
+
+      <div class="reveal-cards">
+        <div class="reveal-card card-left">
+          <div class="reveal-player-name" id="reveal-p1-name">Player 1</div>
+          <div class="reveal-choice" id="reveal-p1-choice">?</div>
+          <div class="random-badge" id="reveal-p1-random">🎲 Random Pick</div>
+        </div>
+        <div class="reveal-vs">⚡</div>
+        <div class="reveal-card card-right">
+          <div class="reveal-player-name" id="reveal-p2-name">Player 2</div>
+          <div class="reveal-choice" id="reveal-p2-choice">?</div>
+          <div class="random-badge" id="reveal-p2-random">🎲 Random Pick</div>
+        </div>
+      </div>
+
+      <div id="reveal-message" class="reveal-message">You both chose the same!</div>
+
+      <button id="btn-next-round" class="primary-btn next-btn">
+        <span>Next Round</span>
+        <svg class="btn-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 12h14M12 5l7 7-7 7" />
+        </svg>
+      </button>
+    </div>
+  </section>
+
+  <!-- ═══════════ SCREEN: FINALE ═══════════ -->
+  <section id="screen-finale" class="screen">
+    <canvas id="confetti-canvas"></canvas>
+    <div class="finale-container">
+      <div class="finale-emoji">🎉</div>
+      <h2 class="finale-title" id="finale-title">Soulmates!</h2>
+      <div class="finale-percentage">
+        <div id="finale-pct" class="big-pct">0%</div>
+        <p class="pct-label">Similarity</p>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div id="stat-matches" class="stat-value">0</div>
+          <div class="stat-label">Matches</div>
+        </div>
+        <div class="stat-card">
+          <div id="stat-clashes" class="stat-value">0</div>
+          <div class="stat-label">Clashes</div>
+        </div>
+        <div class="stat-card">
+          <div id="stat-left" class="stat-value">0</div>
+          <div class="stat-label">Chose A</div>
+        </div>
+        <div class="stat-card">
+          <div id="stat-right" class="stat-value">0</div>
+          <div class="stat-label">Chose B</div>
+        </div>
+      </div>
+
+      <div class="round-breakdown" id="round-breakdown">
+        <!-- JS fills per-round results -->
+      </div>
+
+      <div class="finale-actions">
+        <button id="btn-play-again" class="primary-btn">Play Again</button>
+        <button id="btn-share-results" class="whatsapp-btn small">
+          <svg class="wa-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M17.472 14.382c-.297-.15-1.758-.868-2.031-.967-.273-.099-.472-.149-.67.15-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.019-.458.13-.606.134-.133.297-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.372-.025-.52-.074-.15-.669-1.612-.916-2.207-.242-.579-.487-.5-.67-.51-.173-.008-.372-.01-.571-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.29.173-1.414-.074-.124-.272-.198-.571-.347z" />
+            <path
+              d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.75.75 0 0 0 .917.918l4.458-1.495A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.4 0-4.637-.85-6.382-2.27l-.446-.37-3.112 1.044 1.044-3.112-.37-.446A9.935 9.935 0 0 1 2 12C2 6.486 6.486 2 12 2s10 4.486 10 10-4.486 10-10 10z" />
+          </svg>
+          Share Results
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <script type="module" src="/app.js"></script>
+</body>
+
+</html>
