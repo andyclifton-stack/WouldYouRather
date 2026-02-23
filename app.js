@@ -497,10 +497,15 @@ function showReveal() {
     };
     roundHistory[gameState.currentRound] = result;
 
-    // Sync to Firebase (only P1 does this once to avoid redundancy)
-    if (myRole === 'player1') {
-        gameRef.child('history').child(gameState.currentRound).set(result);
-    }
+    // Persist to Firebase immediately so both players have it for the finale.
+    // Both players write the same data (idempotent) to ensure it's always stored.
+    const histSlot = {};
+    histSlot[`history/${gameState.currentRound}/p1Choice`] = p1Choice;
+    histSlot[`history/${gameState.currentRound}/p2Choice`] = p2Choice;
+    histSlot[`history/${gameState.currentRound}/optionA`] = round.optionA;
+    histSlot[`history/${gameState.currentRound}/optionB`] = round.optionB;
+    histSlot[`history/${gameState.currentRound}/matched`] = matched;
+    gameRef.update(histSlot);
 
     $('reveal-p1-name').textContent = p1.name;
     $('reveal-p2-name').textContent = p2.name;
@@ -562,16 +567,30 @@ function showFinale() {
     showScreen('screen-finale');
     Audio.celebration();
 
-    // Use history from database if available, otherwise fallback to local
+    // Pull history from Firebase gameState (written on reveal screen by both players)
     const historyData = gameState.history || {};
     const finalHistory = [];
 
-    // Convert history object to ordered array
     for (let i = 0; i < gameState.totalRounds; i++) {
-        if (historyData[i]) {
-            finalHistory[i] = historyData[i];
+        const h = historyData[i];
+        if (h) {
+            finalHistory[i] = h;
         } else if (roundHistory[i]) {
+            // Fallback: use locally-recorded history
             finalHistory[i] = roundHistory[i];
+        } else {
+            // Last-resort: reconstruct from gameState rounds + current choices
+            const r = gameState.rounds ? gameState.rounds[i] : null;
+            if (r) {
+                const p1c = gameState.player1?.choice;
+                const p2c = gameState.player2?.choice;
+                // Only do this for the very last round (current) if history is missing
+                if (i === gameState.currentRound && p1c != null && p2c != null) {
+                    const p1Choice = p1c === 'A' ? r.optionA : r.optionB;
+                    const p2Choice = p2c === 'A' ? r.optionA : r.optionB;
+                    finalHistory[i] = { p1Choice, p2Choice, optionA: r.optionA, optionB: r.optionB, matched: p1c === p2c };
+                }
+            }
         }
     }
 
@@ -723,7 +742,7 @@ $('mute-btn').addEventListener('click', () => {
 /* ═══════════ AUDIO UNLOCK ═══════════ */
 document.addEventListener('click', () => {
     Audio.unlockAudio();
-}, { once: true });
+});
 
 /* ═══════════ INIT ═══════════ */
 initLobby();

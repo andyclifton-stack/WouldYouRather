@@ -204,8 +204,15 @@ export function celebration() {
  */
 export function startBgMusic() {
     if (isMuted) return;
-    if (bgOscillators.length > 0) return; // already playing
+    // If oscillators exist but AudioContext is suspended, clear them so we can restart properly
+    if (bgOscillators.length > 0) {
+        if (ctx && ctx.state === 'running') return; // already playing
+        // Context was suspended — stop the silent oscillators
+        stopBgMusic();
+    }
     const c = getCtx();
+    // Don't start if context still won't run (no user gesture yet)
+    if (c.state === 'suspended') return;
 
     bgGainNode = c.createGain();
     bgGainNode.gain.value = 0.06;
@@ -279,7 +286,18 @@ export function getIsMuted() {
 
 /**
  * Must be called from a user gesture to unlock AudioContext.
+ * Also restarts background music if it was waiting to play.
  */
 export function unlockAudio() {
-    getCtx();
+    if (!ctx) {
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (ctx.state === 'suspended') {
+        ctx.resume().then(() => {
+            // Restart bg music if it was supposed to be playing but context was suspended
+            if (!isMuted && bgOscillators.length === 0) {
+                startBgMusic();
+            }
+        });
+    }
 }
