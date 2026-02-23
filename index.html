@@ -30,10 +30,6 @@
   <!-- ═══════════ FLOATING PARTICLES (background) ═══════════ -->
   <div id="particles" aria-hidden="true"></div>
 
-  <!-- ═══════════ MUTE BUTTON ═══════════ -->
-  <button id="mute-btn" class="mute-toggle" aria-label="Toggle audio">
-    <span class="mute-icon">🔊</span>
-  </button>
 
   <!-- ═══════════ SCREEN: SPLASH ═══════════ -->
   <section id="screen-splash" class="screen active">
@@ -230,6 +226,7 @@
           <path d="M5 12h14M12 5l7 7-7 7" />
         </svg>
       </button>
+      <p id="reveal-wait-msg" class="waiting-hint" style="display:none">Waiting for host to continue...</p>
     </div>
   </section>
 
@@ -253,14 +250,6 @@
           <div id="stat-clashes" class="stat-value">0</div>
           <div class="stat-label">Clashes</div>
         </div>
-        <div class="stat-card">
-          <div id="stat-left" class="stat-value">0</div>
-          <div class="stat-label">Chose A</div>
-        </div>
-        <div class="stat-card">
-          <div id="stat-right" class="stat-value">0</div>
-          <div class="stat-label">Chose B</div>
-        </div>
       </div>
 
       <div class="round-breakdown" id="round-breakdown">
@@ -269,6 +258,7 @@
 
       <div class="finale-actions">
         <button id="btn-play-again" class="primary-btn">Play Again</button>
+        <p id="finale-wait-msg" class="waiting-hint" style="display:none">Waiting for host...</p>
         <button id="btn-share-results" class="whatsapp-btn small">
           <svg class="wa-icon" viewBox="0 0 24 24" fill="currentColor">
             <path

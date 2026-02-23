@@ -3,7 +3,6 @@
    ═══════════════════════════════════════════════ */
 
 import { getTopicNames, generateRounds, getOptionImageUrl, preloadRoundImages } from './topics.js';
-import * as Audio from './audio.js';
 
 /* ═══════════ FIREBASE INIT ═══════════ */
 const firebaseConfig = {
@@ -65,7 +64,6 @@ function initSplash() {
     spawnParticles();
     setTimeout(() => {
         showScreen('screen-lobby');
-        Audio.swoosh();
     }, 2600);
 }
 
@@ -128,7 +126,6 @@ function switchTab(tab) {
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     $(`tab-${tab}`).classList.add('active');
     $(`panel-${tab}`).classList.add('active');
-    Audio.swoosh();
 }
 
 /* ═══════════ CREATE GAME ═══════════ */
@@ -160,7 +157,6 @@ function createGame() {
         showWaitingRoom(name);
         listenForUpdates();
         preloadAllRoundImages(rounds, topic);
-        Audio.lockIn();
     }).catch(err => {
         console.error('Create failed:', err);
         alert('Failed to create game. Try again.');
@@ -195,7 +191,6 @@ function joinGame() {
         }).then(() => {
             listenForUpdates();
             preloadAllRoundImages(data.rounds, data.topic);
-            Audio.lockIn();
         });
     });
 }
@@ -382,7 +377,6 @@ function showRound() {
 function makeChoice(choice, isRandom = false) {
     if (hasChosen) return;
     hasChosen = true;
-    if (!isRandom) Audio.lockIn();
 
     gameRef.child(myRole).update({ choice, isRandom });
 
@@ -442,9 +436,8 @@ function startCountdown() {
 
         if (timeLeft <= 3) {
             ring.classList.add('danger');
-            Audio.urgentTick();
         } else {
-            Audio.tick();
+            ring.classList.remove('danger');
         }
     }, 1000);
 }
@@ -477,9 +470,7 @@ function scheduleRevealTransition(delayMs = 0) {
 /* ═══════════ REVEAL ═══════════ */
 function showReveal() {
     clearInterval(countdownInterval);
-    Audio.stopBgMusic();
     showScreen('screen-reveal');
-    Audio.revealSting();
 
     const p1 = gameState.player1;
     const p2 = gameState.player2;
@@ -489,23 +480,12 @@ function showReveal() {
     const p2Choice = p2.choice === 'A' ? round.optionA : round.optionB;
     const matched = p1.choice === p2.choice;
 
-    // Store for finale locally
-    const result = {
+    // Store result locally — both players see every reveal screen so this is always populated
+    roundHistory[gameState.currentRound] = {
         p1Choice, p2Choice,
         optionA: round.optionA, optionB: round.optionB,
         matched
     };
-    roundHistory[gameState.currentRound] = result;
-
-    // Persist to Firebase immediately so both players have it for the finale.
-    // Both players write the same data (idempotent) to ensure it's always stored.
-    const histSlot = {};
-    histSlot[`history/${gameState.currentRound}/p1Choice`] = p1Choice;
-    histSlot[`history/${gameState.currentRound}/p2Choice`] = p2Choice;
-    histSlot[`history/${gameState.currentRound}/optionA`] = round.optionA;
-    histSlot[`history/${gameState.currentRound}/optionB`] = round.optionB;
-    histSlot[`history/${gameState.currentRound}/matched`] = matched;
-    gameRef.update(histSlot);
 
     $('reveal-p1-name').textContent = p1.name;
     $('reveal-p2-name').textContent = p2.name;
@@ -526,86 +506,53 @@ function showReveal() {
         tag.textContent = 'MATCH! ✨';
         tag.className = 'reveal-tag match';
         msg.textContent = 'Great minds think alike!';
-        setTimeout(() => Audio.matchChime(), 400);
     } else {
         tag.textContent = 'CLASH! 💥';
         tag.className = 'reveal-tag clash';
         msg.textContent = 'Opposites attract... right?';
-        setTimeout(() => Audio.clashBuzz(), 400);
     }
 
-    // Next round button
+    // Next round button — only player1 (the host) controls progression
     const nextBtn = $('btn-next-round');
+    const waitMsg = $('reveal-wait-msg');
     const isLastRound = gameState.currentRound >= gameState.totalRounds - 1;
     nextBtn.querySelector('span').textContent = isLastRound ? 'See Results' : 'Next Round';
 
+    if (myRole === 'player1') {
+        nextBtn.style.display = '';
+        if (waitMsg) waitMsg.style.display = 'none';
+    } else {
+        nextBtn.style.display = 'none';
+        if (waitMsg) waitMsg.style.display = '';
+    }
+
     nextBtn.onclick = () => {
         if (isLastRound) {
-            if (myRole === 'player1') {
-                gameRef.update({ phase: 'finale' });
-            }
+            gameRef.update({ phase: 'finale' });
         } else {
-            if (myRole === 'player1') {
-                const nextRound = gameState.currentRound + 1;
-                gameRef.update({
-                    currentRound: nextRound,
-                    phase: 'playing',
-                    'player1/choice': null,
-                    'player2/choice': null
-                });
-            }
+            const nextRound = gameState.currentRound + 1;
+            gameRef.update({
+                currentRound: nextRound,
+                phase: 'playing',
+                'player1/choice': null,
+                'player2/choice': null
+            });
         }
         hasChosen = false;
-        Audio.swoosh();
     };
 }
 
 /* ═══════════ FINALE ═══════════ */
 function showFinale() {
     clearInterval(countdownInterval);
-    Audio.stopBgMusic();
     showScreen('screen-finale');
-    Audio.celebration();
 
-    // Pull history from Firebase gameState (written on reveal screen by both players)
-    const historyData = gameState.history || {};
-    const finalHistory = [];
-
-    for (let i = 0; i < gameState.totalRounds; i++) {
-        const h = historyData[i];
-        if (h) {
-            finalHistory[i] = h;
-        } else if (roundHistory[i]) {
-            // Fallback: use locally-recorded history
-            finalHistory[i] = roundHistory[i];
-        } else {
-            // Last-resort: reconstruct from gameState rounds + current choices
-            const r = gameState.rounds ? gameState.rounds[i] : null;
-            if (r) {
-                const p1c = gameState.player1?.choice;
-                const p2c = gameState.player2?.choice;
-                // Only do this for the very last round (current) if history is missing
-                if (i === gameState.currentRound && p1c != null && p2c != null) {
-                    const p1Choice = p1c === 'A' ? r.optionA : r.optionB;
-                    const p2Choice = p2c === 'A' ? r.optionA : r.optionB;
-                    finalHistory[i] = { p1Choice, p2Choice, optionA: r.optionA, optionB: r.optionB, matched: p1c === p2c };
-                }
-            }
-        }
-    }
-
-    const totalRounds = gameState.totalRounds || 1;
-    const validHistory = finalHistory.filter(r => r != null);
-    const matches = validHistory.filter(r => r.matched).length;
-    const clashes = validHistory.length - matches;
-    const pct = Math.round((matches / Math.max(1, validHistory.length)) * 100);
-
-    // Count left (A) vs right (B) choices for both players
-    let chooseA = 0, chooseB = 0;
-    validHistory.forEach(r => {
-        if (r.p1Choice === r.optionA) chooseA++; else chooseB++;
-        if (r.p2Choice === r.optionA) chooseA++; else chooseB++;
-    });
+    // Use local roundHistory — both players see every reveal screen so this is always complete
+    const history = roundHistory.filter(r => r != null);
+    const total = history.length || 1;
+    const matches = history.filter(r => r.matched).length;
+    const clashes = history.length - matches;
+    const pct = Math.round((matches / total) * 100);
 
     // Fun title
     let title, emoji;
@@ -618,17 +565,15 @@ function showFinale() {
     $('finale-emoji').textContent = emoji;
     $('finale-title').textContent = title;
 
-    // Animated counter
+    // Animated counters
     animateCount('finale-pct', 0, pct, '%');
     animateCount('stat-matches', 0, matches);
     animateCount('stat-clashes', 0, clashes);
-    $('stat-left').textContent = chooseA;
-    $('stat-right').textContent = chooseB;
 
     // Round breakdown
     const breakdown = $('round-breakdown');
     breakdown.innerHTML = '';
-    finalHistory.forEach((r, i) => {
+    roundHistory.forEach((r, i) => {
         if (!r) return;
         const row = document.createElement('div');
         row.className = 'breakdown-row';
@@ -643,17 +588,23 @@ function showFinale() {
     // Confetti
     startConfetti();
 
-    // Play Again
-    $('btn-play-again').onclick = () => {
-        roundHistory = [];
-        if (myRole === 'player1') {
+    // Play Again — only shown to player1 (host), player2 sees a waiting message
+    const playAgainBtn = $('btn-play-again');
+    const finaleWaitMsg = $('finale-wait-msg');
+    if (myRole === 'player1') {
+        playAgainBtn.style.display = '';
+        if (finaleWaitMsg) finaleWaitMsg.style.display = 'none';
+        playAgainBtn.onclick = () => {
+            roundHistory = [];
             gameRef.remove();
-        }
-        showScreen('screen-lobby');
-        Audio.swoosh();
-    };
+            showScreen('screen-lobby');
+        };
+    } else {
+        playAgainBtn.style.display = 'none';
+        if (finaleWaitMsg) finaleWaitMsg.style.display = '';
+    }
 
-    // Share Results
+    // Share Results (both players can share)
     $('btn-share-results').onclick = () => {
         const msg = `🤔 Would You Rather?\n\n${gameState.player1.name} & ${gameState.player2.name}\n📊 ${pct}% similarity — "${title}" ${emoji}\n✅ ${matches} matches / ❌ ${clashes} clashes\n\nPlay: ${window.location.href.split('?')[0]}`;
         window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
@@ -732,17 +683,6 @@ function startConfetti() {
     }
     requestAnimationFrame(draw);
 }
-
-/* ═══════════ MUTE ═══════════ */
-$('mute-btn').addEventListener('click', () => {
-    const muted = Audio.toggleMute();
-    $('mute-btn').querySelector('.mute-icon').textContent = muted ? '🔇' : '🔊';
-});
-
-/* ═══════════ AUDIO UNLOCK ═══════════ */
-document.addEventListener('click', () => {
-    Audio.unlockAudio();
-});
 
 /* ═══════════ INIT ═══════════ */
 initLobby();
