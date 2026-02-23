@@ -317,6 +317,10 @@ function showRound() {
     // Update round label
     $('round-label').textContent = `Round ${gameState.currentRound + 1} / ${gameState.totalRounds}`;
 
+    // Update progress bar
+    const progressPct = ((gameState.currentRound + 1) / gameState.totalRounds) * 100;
+    $('game-progress-bar').style.width = progressPct + '%';
+
     // Set options
     $('option-a-text').textContent = round.optionA;
     $('option-b-text').textContent = round.optionB;
