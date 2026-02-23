@@ -257,8 +257,20 @@
       </div>
 
       <div class="finale-actions">
-        <button id="btn-play-again" class="primary-btn">Play Again</button>
-        <p id="finale-wait-msg" class="waiting-hint" style="display:none">Waiting for host...</p>
+        <!-- Player 1 sees setup options for next game -->
+        <div id="play-again-setup" style="display:none; width:100%;">
+          <h3 class="section-title" style="font-size:1.1rem; margin-bottom:12px;">Play Again?</h3>
+          <label class="field-label">Category</label>
+          <select id="replay-topic" class="styled-select"></select>
+          <label class="field-label">Rounds</label>
+          <div class="slider-row">
+            <input type="range" id="replay-slider" class="styled-slider" min="3" max="10" value="5">
+            <span id="replay-round-count" class="round-badge">5</span>
+          </div>
+          <button id="btn-start-again" class="primary-btn">Start New Game</button>
+        </div>
+        <!-- Player 2 sees a waiting message -->
+        <p id="finale-wait-msg" class="waiting-hint" style="display:none">Waiting for host to start a new game...</p>
         <button id="btn-share-results" class="whatsapp-btn small">
           <svg class="wa-icon" viewBox="0 0 24 24" fill="currentColor">
             <path

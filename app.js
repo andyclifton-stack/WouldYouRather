@@ -307,6 +307,11 @@ function showRound() {
     const round = gameState.rounds[gameState.currentRound];
     if (!round) return;
 
+    // Reset history when a new game starts (both players)
+    if (gameState.currentRound === 0) {
+        roundHistory = [];
+    }
+
     showScreen('screen-game');
 
     // Update round label
@@ -609,19 +614,58 @@ function showFinale() {
     // Confetti
     startConfetti();
 
-    // Play Again — only shown to player1 (host), player2 sees a waiting message
-    const playAgainBtn = $('btn-play-again');
+    // Play Again — Player 1 sees a setup panel, Player 2 sees a waiting message
+    const setupPanel = $('play-again-setup');
     const finaleWaitMsg = $('finale-wait-msg');
+
     if (myRole === 'player1') {
-        playAgainBtn.style.display = '';
+        setupPanel.style.display = '';
         if (finaleWaitMsg) finaleWaitMsg.style.display = 'none';
-        playAgainBtn.onclick = () => {
+
+        // Populate replay topic dropdown (only once)
+        const replaySelect = $('replay-topic');
+        if (replaySelect.options.length === 0) {
+            getTopicNames().forEach(name => {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                replaySelect.appendChild(opt);
+            });
+        }
+        // Default to current topic
+        replaySelect.value = gameState.topic || getTopicNames()[0];
+
+        // Slider sync
+        const replaySlider = $('replay-slider');
+        const replayBadge = $('replay-round-count');
+        replaySlider.oninput = () => { replayBadge.textContent = replaySlider.value; };
+
+        // Start new game in same session
+        $('btn-start-again').onclick = () => {
+            const topic = replaySelect.value;
+            const totalRounds = parseInt(replaySlider.value);
+            const rounds = generateRounds(topic, totalRounds);
             roundHistory = [];
-            gameRef.remove();
-            showScreen('screen-lobby');
+
+            // Reuse the same gameRef — both players are still listening
+            gameRef.update({
+                topic,
+                totalRounds,
+                currentRound: 0,
+                rounds,
+                history: null,
+                phase: 'playing',
+                'player1/choice': null,
+                'player1/isRandom': null,
+                'player2/choice': null,
+                'player2/isRandom': null
+            });
+
+            preloadAllRoundImages(rounds, topic);
+            swoosh();
         };
     } else {
-        playAgainBtn.style.display = 'none';
+        setupPanel.style.display = 'none';
         if (finaleWaitMsg) finaleWaitMsg.style.display = '';
     }
 

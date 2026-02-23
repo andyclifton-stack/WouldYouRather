@@ -733,6 +733,7 @@ body {
   width: 100%;
   max-width: 160px;
   aspect-ratio: 4 / 3;
+  min-height: 120px;
   border-radius: 14px;
   overflow: hidden;
   margin: 0 auto 12px;
