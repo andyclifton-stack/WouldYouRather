@@ -3,6 +3,7 @@
    ═══════════════════════════════════════════════ */
 
 import { getTopicNames, generateRounds, getOptionImageUrl, preloadRoundImages } from './topics.js';
+import { swoosh, lockIn, tick, urgentTick, revealSting, matchChime, clashBuzz, celebration, unlockAudio } from './audio.js';
 
 /* ═══════════ FIREBASE INIT ═══════════ */
 const firebaseConfig = {
@@ -64,6 +65,7 @@ function initSplash() {
     spawnParticles();
     setTimeout(() => {
         showScreen('screen-lobby');
+        swoosh();
     }, 2600);
 }
 
@@ -157,6 +159,7 @@ function createGame() {
         showWaitingRoom(name);
         listenForUpdates();
         preloadAllRoundImages(rounds, topic);
+        lockIn();
     }).catch(err => {
         console.error('Create failed:', err);
         alert('Failed to create game. Try again.');
@@ -191,6 +194,7 @@ function joinGame() {
         }).then(() => {
             listenForUpdates();
             preloadAllRoundImages(data.rounds, data.topic);
+            lockIn();
         });
     });
 }
@@ -368,15 +372,13 @@ function showRound() {
     } else {
         resetCountdown();
     }
-
-    // Start bg music
-    Audio.startBgMusic();
 }
 
 /* ═══════════ CHOICE HANDLERS ═══════════ */
 function makeChoice(choice, isRandom = false) {
     if (hasChosen) return;
     hasChosen = true;
+    if (!isRandom) lockIn();
 
     gameRef.child(myRole).update({ choice, isRandom });
 
@@ -436,8 +438,10 @@ function startCountdown() {
 
         if (timeLeft <= 3) {
             ring.classList.add('danger');
+            urgentTick();
         } else {
             ring.classList.remove('danger');
+            tick();
         }
     }, 1000);
 }
@@ -471,6 +475,7 @@ function scheduleRevealTransition(delayMs = 0) {
 function showReveal() {
     clearInterval(countdownInterval);
     showScreen('screen-reveal');
+    revealSting();
 
     const p1 = gameState.player1;
     const p2 = gameState.player2;
@@ -480,12 +485,9 @@ function showReveal() {
     const p2Choice = p2.choice === 'A' ? round.optionA : round.optionB;
     const matched = p1.choice === p2.choice;
 
-    // Store result locally — both players see every reveal screen so this is always populated
-    roundHistory[gameState.currentRound] = {
-        p1Choice, p2Choice,
-        optionA: round.optionA, optionB: round.optionB,
-        matched
-    };
+    // Store result locally
+    const result = { p1Choice, p2Choice, optionA: round.optionA, optionB: round.optionB, matched };
+    roundHistory[gameState.currentRound] = result;
 
     $('reveal-p1-name').textContent = p1.name;
     $('reveal-p2-name').textContent = p2.name;
@@ -500,16 +502,18 @@ function showReveal() {
     else $('reveal-p2-random').classList.remove('show');
 
     const tag = $('reveal-result-tag');
-    const msg = $('reveal-message');
+    const msgEl = $('reveal-message');
 
     if (matched) {
         tag.textContent = 'MATCH! ✨';
         tag.className = 'reveal-tag match';
-        msg.textContent = 'Great minds think alike!';
+        msgEl.textContent = 'Great minds think alike!';
+        setTimeout(() => matchChime(), 400);
     } else {
         tag.textContent = 'CLASH! 💥';
         tag.className = 'reveal-tag clash';
-        msg.textContent = 'Opposites attract... right?';
+        msgEl.textContent = 'Opposites attract... right?';
+        setTimeout(() => clashBuzz(), 400);
     }
 
     // Next round button — only player1 (the host) controls progression
@@ -527,18 +531,24 @@ function showReveal() {
     }
 
     nextBtn.onclick = () => {
+        // Write this round's history ATOMICALLY with the phase change
+        // so it's guaranteed to arrive at all devices together
+        const update = {
+            [`history/${gameState.currentRound}`]: result
+        };
+
         if (isLastRound) {
-            gameRef.update({ phase: 'finale' });
+            update.phase = 'finale';
         } else {
-            const nextRound = gameState.currentRound + 1;
-            gameRef.update({
-                currentRound: nextRound,
-                phase: 'playing',
-                'player1/choice': null,
-                'player2/choice': null
-            });
+            update.currentRound = gameState.currentRound + 1;
+            update.phase = 'playing';
+            update['player1/choice'] = null;
+            update['player2/choice'] = null;
         }
+
+        gameRef.update(update);
         hasChosen = false;
+        swoosh();
     };
 }
 
@@ -546,10 +556,21 @@ function showReveal() {
 function showFinale() {
     clearInterval(countdownInterval);
     showScreen('screen-finale');
+    celebration();
 
-    // Use local roundHistory — both players see every reveal screen so this is always complete
-    const history = roundHistory.filter(r => r != null);
-    const total = history.length || 1;
+    // Read history from Firebase (written atomically with phase transitions)
+    // Falls back to local roundHistory if Firebase entry is missing
+    const historyData = gameState.history || {};
+    const history = [];
+    for (let i = 0; i < (gameState.totalRounds || 0); i++) {
+        if (historyData[i]) {
+            history.push(historyData[i]);
+        } else if (roundHistory[i]) {
+            history.push(roundHistory[i]);
+        }
+    }
+
+    const total = Math.max(1, history.length);
     const matches = history.filter(r => r.matched).length;
     const clashes = history.length - matches;
     const pct = Math.round((matches / total) * 100);
@@ -683,6 +704,9 @@ function startConfetti() {
     }
     requestAnimationFrame(draw);
 }
+
+/* ═══════════ AUDIO UNLOCK ═══════════ */
+document.addEventListener('click', () => unlockAudio(), { once: true });
 
 /* ═══════════ INIT ═══════════ */
 initLobby();
