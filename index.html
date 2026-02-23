@@ -211,19 +211,41 @@
 
       <div class="reveal-cards">
         <div class="reveal-card card-left">
-          <div class="reveal-player-name" id="reveal-p1-name">Player 1</div>
+          <div class="reveal-player-row">
+            <span id="reveal-p1-avatar" class="reveal-avatar"></span>
+            <div class="reveal-player-name" id="reveal-p1-name">Player 1</div>
+          </div>
+          <span id="reveal-p1-speed" class="speed-badge" style="display:none">⚡ Speed Demon</span>
           <div class="reveal-choice" id="reveal-p1-choice">?</div>
           <div class="random-badge" id="reveal-p1-random">🎲 Random Pick</div>
         </div>
         <div class="reveal-vs">⚡</div>
         <div class="reveal-card card-right">
-          <div class="reveal-player-name" id="reveal-p2-name">Player 2</div>
+          <div class="reveal-player-row">
+            <span id="reveal-p2-avatar" class="reveal-avatar"></span>
+            <div class="reveal-player-name" id="reveal-p2-name">Player 2</div>
+          </div>
+          <span id="reveal-p2-speed" class="speed-badge" style="display:none">⚡ Speed Demon</span>
           <div class="reveal-choice" id="reveal-p2-choice">?</div>
           <div class="random-badge" id="reveal-p2-random">🎲 Random Pick</div>
         </div>
       </div>
 
+      <!-- Streak banner -->
+      <div id="streak-banner" class="streak-banner" style="display:none">🔥 Streak!</div>
+
       <div id="reveal-message" class="reveal-message">You both chose the same!</div>
+
+      <!-- Emoji reactions -->
+      <div id="emoji-bar" class="emoji-bar">
+        <button class="emoji-btn" data-emoji="😂">😂</button>
+        <button class="emoji-btn" data-emoji="🤯">🤯</button>
+        <button class="emoji-btn" data-emoji="😤">😤</button>
+        <button class="emoji-btn" data-emoji="🎉">🎉</button>
+        <button class="emoji-btn" data-emoji="❤️">❤️</button>
+        <button class="emoji-btn" data-emoji="👎">👎</button>
+      </div>
+      <div id="emoji-float" class="emoji-float-area"></div>
 
       <button id="btn-next-round" class="primary-btn next-btn">
         <span>Next Round</span>
@@ -242,16 +264,21 @@
       <div id="finale-emoji" class="finale-emoji">🎉</div>
       <h2 class="finale-title" id="finale-title">Soulmates!</h2>
       <div class="finale-percentage">
-        <div id="finale-pct" class="big-pct">0%</div>
-        <p class="pct-label">Similarity</p>
+        <span id="finale-match-pct" class="big-pct">0%</span>
+        <span class="pct-label">Matching choices</span>
       </div>
 
-      <div class="stats-grid">
-        <div class="stat-card">
+      <div class="finale-chart">
+        <div id="bar-match" class="finale-bar bar-match" style="width: 0%">MATCHES</div>
+        <div id="bar-clash" class="finale-bar bar-clash" style="width: 0%">CLASHES</div>
+      </div>
+
+      <div class="finale-stats-grid">
+        <div id="stat-card-matches" class="stat-card" style="cursor: pointer">
           <div id="stat-matches" class="stat-value">0</div>
           <div class="stat-label">Matches</div>
         </div>
-        <div class="stat-card">
+        <div id="stat-card-clashes" class="stat-card" style="cursor: pointer">
           <div id="stat-clashes" class="stat-value">0</div>
           <div class="stat-label">Clashes</div>
         </div>
@@ -288,6 +315,20 @@
       </div>
     </div>
   </section>
+
+  <!-- ═══════════ VS CLASH OVERLAY ═══════════ -->
+  <div id="vs-overlay" class="vs-overlay" style="display:none">
+    <div class="vs-panel vs-panel-left">
+      <span id="vs-left-text" class="vs-choice-text">?</span>
+    </div>
+    <div class="vs-center">
+      <span class="vs-text">VS</span>
+    </div>
+    <div class="vs-panel vs-panel-right">
+      <span id="vs-right-text" class="vs-choice-text">?</span>
+    </div>
+    <div class="vs-flash"></div>
+  </div>
 
   <script type="module" src="/app.js"></script>
 </body>

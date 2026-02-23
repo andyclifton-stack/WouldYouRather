@@ -197,107 +197,97 @@ export function celebration() {
     });
 }
 
-/* ── BACKGROUND MUSIC ── */
-
 /**
- * Start the ambient tension loop.
+ * Heartbeat — deep thump for countdown urgency.
  */
-export function startBgMusic() {
+export function heartbeat() {
     if (isMuted) return;
-    // If oscillators exist but AudioContext is suspended, clear them so we can restart properly
-    if (bgOscillators.length > 0) {
-        if (ctx && ctx.state === 'running') return; // already playing
-        // Context was suspended — stop the silent oscillators
-        stopBgMusic();
-    }
     const c = getCtx();
-    // Don't start if context still won't run (no user gesture yet)
-    if (c.state === 'suspended') return;
-
-    bgGainNode = c.createGain();
-    bgGainNode.gain.value = 0.06;
-    bgGainNode.connect(c.destination);
-
-    // Low drone
-    const drone = c.createOscillator();
-    drone.type = 'sine';
-    drone.frequency.value = 55;
-    drone.connect(bgGainNode);
-    drone.start();
-    bgOscillators.push(drone);
-
-    // Pulsing pad
-    const pad = c.createOscillator();
-    pad.type = 'triangle';
-    pad.frequency.value = 110;
-    const padGain = c.createGain();
-    padGain.gain.value = 0;
-    pad.connect(padGain).connect(bgGainNode);
-    pad.start();
-    bgOscillators.push(pad);
-
-    // LFO for pulse
-    const lfo = c.createOscillator();
-    lfo.type = 'sine';
-    lfo.frequency.value = 0.5; // slow pulse
-    const lfoGain = c.createGain();
-    lfoGain.gain.value = 0.04;
-    lfo.connect(lfoGain).connect(padGain.gain);
-    lfo.start();
-    bgOscillators.push(lfo);
-
-    // Higher shimmer
-    const shimmer = c.createOscillator();
-    shimmer.type = 'sine';
-    shimmer.frequency.value = 220;
-    const shimGain = c.createGain();
-    shimGain.gain.value = 0.02;
-    shimmer.connect(shimGain).connect(bgGainNode);
-    shimmer.start();
-    bgOscillators.push(shimmer);
+    // Double thump like a real heartbeat
+    [0, 0.12].forEach(offset => {
+        const { osc, gain } = tone(55, 0.15, 'sine');
+        gain.gain.setValueAtTime(0, c.currentTime + offset);
+        gain.gain.linearRampToValueAtTime(0.35, c.currentTime + offset + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + offset + 0.15);
+        gain.connect(c.destination);
+        osc.start(c.currentTime + offset);
+        osc.stop(c.currentTime + offset + 0.2);
+    });
 }
 
 /**
- * Stop the background music.
+ * Drumroll — rapid filtered noise with rising pitch. Tension builder.
  */
-export function stopBgMusic() {
-    bgOscillators.forEach(osc => {
-        try { osc.stop(); } catch (e) { }
+export function drumroll() {
+    if (isMuted) return;
+    const c = getCtx();
+    const { src, filter } = noise(0.6, 300);
+    const gain = c.createGain();
+    gain.gain.setValueAtTime(0.05, c.currentTime);
+    gain.gain.linearRampToValueAtTime(0.2, c.currentTime + 0.5);
+    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.6);
+    filter.frequency.setValueAtTime(200, c.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(1500, c.currentTime + 0.55);
+    filter.Q.value = 3;
+    filter.connect(gain).connect(c.destination);
+    src.start(c.currentTime);
+    src.stop(c.currentTime + 0.6);
+}
+
+/**
+ * Crowd cheer — layered mid-freq noise bursts. For match.
+ */
+export function crowdCheer() {
+    if (isMuted) return;
+    const c = getCtx();
+    // Multiple noise bursts at different frequencies
+    [800, 1200, 2000].forEach((freq, i) => {
+        const { src, filter } = noise(1.0, freq);
+        const gain = c.createGain();
+        gain.gain.setValueAtTime(0, c.currentTime + i * 0.05);
+        gain.gain.linearRampToValueAtTime(0.08, c.currentTime + i * 0.05 + 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 1.0);
+        filter.Q.value = 0.5;
+        filter.connect(gain).connect(c.destination);
+        src.start(c.currentTime + i * 0.05);
+        src.stop(c.currentTime + 1.0);
     });
-    bgOscillators = [];
-    bgGainNode = null;
 }
 
-/* ── MUTE CONTROL ── */
-
-export function toggleMute() {
-    isMuted = !isMuted;
-    if (isMuted) {
-        stopBgMusic();
-    } else {
-        startBgMusic();
-    }
-    return isMuted;
-}
-
-export function getIsMuted() {
-    return isMuted;
+/**
+ * Crowd gasp — quick inhale noise + descending tone. For clash.
+ */
+export function crowdGasp() {
+    if (isMuted) return;
+    const c = getCtx();
+    // Inhale noise
+    const { src, filter } = noise(0.3, 3000);
+    const gain = c.createGain();
+    gain.gain.setValueAtTime(0.1, c.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.3);
+    filter.Q.value = 0.8;
+    filter.connect(gain).connect(c.destination);
+    src.start(c.currentTime);
+    src.stop(c.currentTime + 0.3);
+    // Descending "oh no" tone
+    const { osc, gain: tGain } = tone(600, 0.5, 'sine');
+    tGain.gain.setValueAtTime(0.08, c.currentTime + 0.05);
+    tGain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.5);
+    osc.frequency.setValueAtTime(600, c.currentTime + 0.05);
+    osc.frequency.exponentialRampToValueAtTime(200, c.currentTime + 0.4);
+    tGain.connect(c.destination);
+    osc.start(c.currentTime + 0.05);
+    osc.stop(c.currentTime + 0.55);
 }
 
 /**
  * Must be called from a user gesture to unlock AudioContext.
- * Also restarts background music if it was waiting to play.
  */
 export function unlockAudio() {
     if (!ctx) {
         ctx = new (window.AudioContext || window.webkitAudioContext)();
     }
     if (ctx.state === 'suspended') {
-        ctx.resume().then(() => {
-            // Restart bg music if it was supposed to be playing but context was suspended
-            if (!isMuted && bgOscillators.length === 0) {
-                startBgMusic();
-            }
-        });
+        ctx.resume();
     }
 }

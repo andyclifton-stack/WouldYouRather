@@ -3,7 +3,7 @@
    ═══════════════════════════════════════════════ */
 
 import { getTopicNames, generateRounds, getOptionImageUrl, preloadRoundImages } from './topics.js';
-import { swoosh, lockIn, tick, urgentTick, revealSting, matchChime, clashBuzz, celebration, unlockAudio } from './audio.js';
+import { swoosh, lockIn, tick, urgentTick, revealSting, matchChime, clashBuzz, celebration, heartbeat, drumroll, crowdCheer, crowdGasp, unlockAudio } from './audio.js';
 
 /* ═══════════ FIREBASE INIT ═══════════ */
 const firebaseConfig = {
@@ -17,6 +17,12 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
+/* ═══════════ PLAYER EMOJIS ═══════════ */
+const PLAYER_EMOJIS = ['🐶', '🐱', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🐣', '🦖', '🦄', '🐝'];
+function getRandomEmoji() {
+    return PLAYER_EMOJIS[Math.floor(Math.random() * PLAYER_EMOJIS.length)];
+}
+
 const db = firebase.database();
 
 /* ═══════════ LOCAL STATE ═══════════ */
@@ -34,6 +40,27 @@ let countdownInterval = null;
 let countdownActive = false;
 let hasChosen = false;
 let roundHistory = []; // { p1Choice, p2Choice, optionA, optionB, matched }
+let lastRevealedRound = -1;
+let finaleShown = false;
+let matchStreak = 0;
+let hasReacted = false; // Prevent emoji spam per round
+
+/* ═══════════ TOPIC COLOUR MAP ═══════════ */
+const TOPIC_HUES = {
+    'Food Fights': 25,
+    'Travel': 200,
+    'Movies & TV': 280,
+    'Music': 320,
+    'Sport': 140,
+    'Tech & Gaming': 250,
+    'Animals': 100,
+    'Fashion & Style': 340,
+};
+
+/* ═══════════ HAPTIC FEEDBACK ═══════════ */
+function haptic(pattern) {
+    if (navigator.vibrate) navigator.vibrate(pattern);
+}
 
 /* ═══════════ DOM REFS ═══════════ */
 const $ = id => document.getElementById(id);
@@ -148,7 +175,7 @@ function createGame() {
         totalRounds,
         currentRound: 0,
         rounds,
-        player1: { id: localPlayerId, name, choice: null, ready: false },
+        player1: { id: localPlayerId, name, choice: null, ready: false, avatar: getRandomEmoji() },
         player2: null,
         phase: 'waiting',
         createdAt: firebase.database.ServerValue.TIMESTAMP
@@ -158,6 +185,7 @@ function createGame() {
     gameRef.set(sessionData).then(() => {
         showWaitingRoom(name);
         listenForUpdates();
+        listenForReactions();
         preloadAllRoundImages(rounds, topic);
         lockIn();
     }).catch(err => {
@@ -189,10 +217,11 @@ function joinGame() {
 
         myRole = 'player2';
         gameRef.update({
-            player2: { id: localPlayerId, name, choice: null, ready: false },
+            player2: { id: localPlayerId, name, choice: null, ready: false, avatar: getRandomEmoji() },
             phase: 'playing'
         }).then(() => {
             listenForUpdates();
+            listenForReactions();
             preloadAllRoundImages(data.rounds, data.topic);
             lockIn();
         });
@@ -310,9 +339,14 @@ function showRound() {
     // Reset history when a new game starts (both players)
     if (gameState.currentRound === 0) {
         roundHistory = [];
+        matchStreak = 0;
     }
 
     showScreen('screen-game');
+
+    // Set topic hue for dynamic theme
+    const hue = TOPIC_HUES[gameState.topic] || 280;
+    document.documentElement.style.setProperty('--topic-hue', hue);
 
     // Update round label
     $('round-label').textContent = `Round ${gameState.currentRound + 1} / ${gameState.totalRounds}`;
@@ -387,9 +421,9 @@ function showRound() {
 function makeChoice(choice, isRandom = false) {
     if (hasChosen) return;
     hasChosen = true;
-    if (!isRandom) lockIn();
+    if (!isRandom) { lockIn(); haptic(30); }
 
-    gameRef.child(myRole).update({ choice, isRandom });
+    gameRef.child(myRole).update({ choice, isRandom, timestamp: Date.now() });
 
     // Update UI immediately
     if (choice === 'A') {
@@ -447,7 +481,7 @@ function startCountdown() {
 
         if (timeLeft <= 3) {
             ring.classList.add('danger');
-            urgentTick();
+            heartbeat();
         } else {
             ring.classList.remove('danger');
             tick();
@@ -467,6 +501,8 @@ function handleTimeout() {
 }
 
 function scheduleRevealTransition(delayMs = 0) {
+    // Play drumroll for tension during the delay
+    drumroll();
     setTimeout(() => {
         gameRef.once('value', snap => {
             const data = snap.val();
@@ -481,25 +517,76 @@ function scheduleRevealTransition(delayMs = 0) {
 }
 
 /* ═══════════ REVEAL ═══════════ */
+function showVSOverlay(c1, c2, callback) {
+    const overlay = $('vs-overlay');
+    $('vs-left-text').textContent = c1;
+    $('vs-right-text').textContent = c2;
+    overlay.style.display = 'flex';
+
+    setTimeout(() => {
+        overlay.style.display = 'none';
+        if (callback) callback();
+    }, 1500);
+}
+
 function showReveal() {
     clearInterval(countdownInterval);
-    showScreen('screen-reveal');
-    revealSting();
+
+    // Guard against re-triggering reveal on every update (e.g. emoji reactions)
+    if (lastRevealedRound === gameState.currentRound) return;
+    lastRevealedRound = gameState.currentRound;
 
     const p1 = gameState.player1;
     const p2 = gameState.player2;
     const round = gameState.rounds[gameState.currentRound];
-
     const p1Choice = p1.choice === 'A' ? round.optionA : round.optionB;
     const p2Choice = p2.choice === 'A' ? round.optionA : round.optionB;
+
+    showVSOverlay(p1Choice, p2Choice, () => {
+        showScreen('screen-reveal');
+        revealSting();
+        renderRevealData(p1, p2, round, p1Choice, p2Choice);
+    });
+}
+
+function renderRevealData(p1, p2, round, p1Choice, p2Choice) {
     const matched = p1.choice === p2.choice;
 
     // Store result locally
     const result = { p1Choice, p2Choice, optionA: round.optionA, optionB: round.optionB, matched };
     roundHistory[gameState.currentRound] = result;
 
+    // Speed bonus — compare timestamps
+    const p1Speed = $('reveal-p1-speed');
+    const p2Speed = $('reveal-p2-speed');
+    p1Speed.style.display = 'none';
+    p2Speed.style.display = 'none';
+    if (p1.timestamp && p2.timestamp && !p1.isRandom && !p2.isRandom) {
+        if (p1.timestamp < p2.timestamp) p1Speed.style.display = '';
+        else if (p2.timestamp < p1.timestamp) p2Speed.style.display = '';
+    }
+
+    // Streak tracking
+    if (matched) {
+        matchStreak++;
+    } else {
+        matchStreak = 0;
+    }
+    const streakBanner = $('streak-banner');
+    if (matchStreak >= 3) {
+        streakBanner.style.display = '';
+        streakBanner.textContent = `🔥 ${matchStreak}x Streak!`;
+    } else {
+        streakBanner.style.display = 'none';
+    }
+
+    // Reset/Setup emoji float area
+    $('emoji-float').innerHTML = '';
+
     $('reveal-p1-name').textContent = p1.name;
     $('reveal-p2-name').textContent = p2.name;
+    if (p1.avatar) $('reveal-p1-avatar').textContent = p1.avatar;
+    if (p2.avatar) $('reveal-p2-avatar').textContent = p2.avatar;
     $('reveal-p1-choice').textContent = p1Choice;
     $('reveal-p2-choice').textContent = p2Choice;
 
@@ -517,12 +604,12 @@ function showReveal() {
         tag.textContent = 'MATCH! ✨';
         tag.className = 'reveal-tag match';
         msgEl.textContent = 'Great minds think alike!';
-        setTimeout(() => matchChime(), 400);
+        setTimeout(() => { crowdCheer(); matchChime(); haptic(50); }, 400);
     } else {
         tag.textContent = 'CLASH! 💥';
         tag.className = 'reveal-tag clash';
         msgEl.textContent = 'Opposites attract... right?';
-        setTimeout(() => clashBuzz(), 400);
+        setTimeout(() => { crowdGasp(); clashBuzz(); haptic([30, 20, 30]); }, 400);
     }
 
     // Next round button — only player1 (the host) controls progression
@@ -552,7 +639,9 @@ function showReveal() {
             update.currentRound = gameState.currentRound + 1;
             update.phase = 'playing';
             update['player1/choice'] = null;
+            update['player1/isRandom'] = null;
             update['player2/choice'] = null;
+            update['player2/isRandom'] = null;
         }
 
         gameRef.update(update);
@@ -563,9 +652,15 @@ function showReveal() {
 
 /* ═══════════ FINALE ═══════════ */
 function showFinale() {
+    if (finaleShown) return;
+    finaleShown = true;
+
     clearInterval(countdownInterval);
     showScreen('screen-finale');
     celebration();
+
+    const p1 = gameState.player1;
+    const p2 = gameState.player2;
 
     // Read history from Firebase (written atomically with phase transitions)
     // Falls back to local roundHistory if Firebase entry is missing
@@ -596,20 +691,57 @@ function showFinale() {
     $('finale-title').textContent = title;
 
     // Animated counters
-    animateCount('finale-pct', 0, pct, '%');
+    animateCount('finale-match-pct', 0, pct, '%');
     animateCount('stat-matches', 0, matches);
     animateCount('stat-clashes', 0, clashes);
+
+    // Animate finale chart bars and add filters
+    setTimeout(() => {
+        const matchBar = $('bar-match');
+        const clashBar = $('bar-clash');
+        matchBar.style.width = pct + '%';
+        clashBar.style.width = (100 - pct) + '%';
+
+        // Hide text if bar is too small
+        if (pct < 15) matchBar.style.color = 'transparent';
+        if (pct > 85) clashBar.style.color = 'transparent';
+
+        // Add filter click listeners
+        matchBar.onclick = () => filterHistory('match');
+        clashBar.onclick = () => filterHistory('clash');
+        $('stat-card-matches').onclick = () => filterHistory('match');
+        $('stat-card-clashes').onclick = () => filterHistory('clash');
+    }, 500);
+
+    function filterHistory(type) {
+        const rows = document.querySelectorAll('.breakdown-row');
+        rows.forEach(row => {
+            const isMatch = row.querySelector('.br-result').classList.contains('match');
+            if (type === 'match') row.style.display = isMatch ? '' : 'none';
+            else row.style.display = isMatch ? 'none' : '';
+        });
+
+        // Add a "Show All" toggle if clicking same bar twice? 
+        // Or just let them click the title to reset.
+        $('finale-title').style.cursor = 'pointer';
+        $('finale-title').onclick = () => {
+            rows.forEach(r => r.style.display = '');
+        };
+    }
 
     // Round breakdown
     const breakdown = $('round-breakdown');
     breakdown.innerHTML = '';
-    roundHistory.forEach((r, i) => {
+    history.forEach((r, i) => {
         if (!r) return;
         const row = document.createElement('div');
         row.className = 'breakdown-row';
         row.innerHTML = `
       <span class="br-round">${i + 1}</span>
-      <span class="br-choice">${r.optionA} vs ${r.optionB}</span>
+      <div class="br-choices">
+        <span class="avatar-mini">${p1.avatar || ''}</span> ${r.p1Choice} 
+        <span class="avatar-mini">${p2.avatar || ''}</span> ${r.p2Choice}
+      </div>
       <span class="br-result ${r.matched ? 'match' : 'clash'}">${r.matched ? '✓ Match' : '✗ Clash'}</span>
     `;
         breakdown.appendChild(row);
@@ -652,6 +784,8 @@ function showFinale() {
             roundHistory = [];
 
             // Reuse the same gameRef — both players are still listening
+            lastRevealedRound = -1;
+            finaleShown = false;
             gameRef.update({
                 topic,
                 totalRounds,
@@ -753,9 +887,54 @@ function startConfetti() {
     requestAnimationFrame(draw);
 }
 
+/* ═══════════ EMOJI REACTIONS ═══════════ */
+function spawnFloatingEmoji(emoji) {
+    const container = $('emoji-float');
+    const el = document.createElement('span');
+    el.className = 'emoji-float';
+    el.textContent = emoji;
+    el.style.left = (30 + Math.random() * 40) + '%';
+    el.style.bottom = '20%';
+    container.appendChild(el);
+    setTimeout(() => el.remove(), 2000);
+}
+
+function initEmojiReactions() {
+    document.querySelectorAll('.emoji-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (!gameRef) return;
+            const emoji = btn.dataset.emoji;
+            spawnFloatingEmoji(emoji);
+
+            // Push to Firebase so the other player sees it
+            gameRef.child(`reactions/${gameState.currentRound}/${myRole}`).push(emoji);
+        });
+    });
+}
+
+function listenForReactions() {
+    if (!gameRef) return;
+    const otherRole = myRole === 'player1' ? 'player2' : 'player1';
+
+    // Listen for peer reactions in current round
+    let currentRoundReactionRef = null;
+
+    gameRef.child('currentRound').on('value', snap => {
+        const rd = snap.val();
+        if (rd === null) return;
+
+        if (currentRoundReactionRef) currentRoundReactionRef.off();
+        currentRoundReactionRef = gameRef.child(`reactions/${rd}/${otherRole}`);
+        currentRoundReactionRef.on('child_added', s => {
+            spawnFloatingEmoji(s.val());
+        });
+    });
+}
+
 /* ═══════════ AUDIO UNLOCK ═══════════ */
 document.addEventListener('click', () => unlockAudio(), { once: true });
 
 /* ═══════════ INIT ═══════════ */
 initLobby();
 initSplash();
+initEmojiReactions();
