@@ -160,12 +160,18 @@ export function generateRounds(topicName, count) {
     const pool = TOPICS[topicName];
     if (!pool) return [];
 
-    // Shuffle a copy
-    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    // Fisher-Yates shuffle for true randomness
+    const shuffled = [...pool];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
 
+    // Never repeat — take only as many unique pairs as available
+    const safeCount = Math.min(count, shuffled.length);
     const rounds = [];
-    for (let i = 0; i < count; i++) {
-        const pair = shuffled[i % shuffled.length];
+    for (let i = 0; i < safeCount; i++) {
+        const pair = shuffled[i];
         // Randomly swap A/B so left/right isn't predictable
         if (Math.random() > 0.5) {
             rounds.push({ optionA: pair[0], optionB: pair[1] });

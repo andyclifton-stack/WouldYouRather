@@ -41,7 +41,7 @@ const $ = id => document.getElementById(id);
 /* ═══════════ PARTICLES ═══════════ */
 function spawnParticles() {
     const container = $('particles');
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 60; i++) {
         const p = document.createElement('div');
         p.className = 'particle';
         const size = Math.random() * 5 + 2;
