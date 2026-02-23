@@ -363,11 +363,7 @@ function showRound() {
     const p2Chose = gameState.player2?.choice != null;
 
     if (p1Chose && p2Chose) {
-        if (myRole === 'player1') {
-            setTimeout(() => {
-                gameRef.update({ phase: 'reveal' });
-            }, 800);
-        }
+        scheduleRevealTransition(800);
         return;
     }
 
@@ -460,17 +456,22 @@ function handleTimeout() {
         makeChoice(randomChoice, true);
     }
 
-    // Player1 triggers reveal after timeout if both have now chosen
-    if (myRole === 'player1') {
-        setTimeout(() => {
-            gameRef.once('value', snap => {
-                const data = snap.val();
-                if (data && data.phase === 'playing') {
-                    gameRef.update({ phase: 'reveal' });
-                }
-            });
-        }, 1200);
-    }
+    // Any connected player can safely promote to reveal once both are locked.
+    scheduleRevealTransition(1200);
+}
+
+function scheduleRevealTransition(delayMs = 0) {
+    setTimeout(() => {
+        gameRef.once('value', snap => {
+            const data = snap.val();
+            if (!data || data.phase !== 'playing') return;
+            const p1Chose = data.player1?.choice != null;
+            const p2Chose = data.player2?.choice != null;
+            if (p1Chose && p2Chose) {
+                gameRef.update({ phase: 'reveal' });
+            }
+        });
+    }, delayMs);
 }
 
 /* ═══════════ REVEAL ═══════════ */
