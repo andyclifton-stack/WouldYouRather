@@ -489,12 +489,18 @@ function showReveal() {
     const p2Choice = p2.choice === 'A' ? round.optionA : round.optionB;
     const matched = p1.choice === p2.choice;
 
-    // Store for finale
-    roundHistory[gameState.currentRound] = {
+    // Store for finale locally
+    const result = {
         p1Choice, p2Choice,
         optionA: round.optionA, optionB: round.optionB,
         matched
     };
+    roundHistory[gameState.currentRound] = result;
+
+    // Sync to Firebase (only P1 does this once to avoid redundancy)
+    if (myRole === 'player1') {
+        gameRef.child('history').child(gameState.currentRound).set(result);
+    }
 
     $('reveal-p1-name').textContent = p1.name;
     $('reveal-p2-name').textContent = p2.name;
@@ -556,18 +562,28 @@ function showFinale() {
     showScreen('screen-finale');
     Audio.celebration();
 
-    // Build history from Firebase if we don't have it locally
-    buildRoundHistory();
+    // Use history from database if available, otherwise fallback to local
+    const historyData = gameState.history || {};
+    const finalHistory = [];
 
-    const totalRounds = gameState.totalRounds;
-    const matches = roundHistory.filter(r => r && r.matched).length;
-    const clashes = totalRounds - matches;
-    const pct = Math.round((matches / totalRounds) * 100);
+    // Convert history object to ordered array
+    for (let i = 0; i < gameState.totalRounds; i++) {
+        if (historyData[i]) {
+            finalHistory[i] = historyData[i];
+        } else if (roundHistory[i]) {
+            finalHistory[i] = roundHistory[i];
+        }
+    }
+
+    const totalRounds = gameState.totalRounds || 1;
+    const validHistory = finalHistory.filter(r => r != null);
+    const matches = validHistory.filter(r => r.matched).length;
+    const clashes = validHistory.length - matches;
+    const pct = Math.round((matches / Math.max(1, validHistory.length)) * 100);
 
     // Count left (A) vs right (B) choices for both players
     let chooseA = 0, chooseB = 0;
-    roundHistory.forEach(r => {
-        if (!r) return;
+    validHistory.forEach(r => {
         if (r.p1Choice === r.optionA) chooseA++; else chooseB++;
         if (r.p2Choice === r.optionA) chooseA++; else chooseB++;
     });
@@ -593,7 +609,7 @@ function showFinale() {
     // Round breakdown
     const breakdown = $('round-breakdown');
     breakdown.innerHTML = '';
-    roundHistory.forEach((r, i) => {
+    finalHistory.forEach((r, i) => {
         if (!r) return;
         const row = document.createElement('div');
         row.className = 'breakdown-row';
@@ -625,25 +641,7 @@ function showFinale() {
     };
 }
 
-function buildRoundHistory() {
-    // Fill gaps from Firebase state
-    if (!gameState.rounds) return;
-    for (let i = 0; i <= gameState.currentRound; i++) {
-        if (!roundHistory[i]) {
-            const round = gameState.rounds[i];
-            if (!round) continue;
-            // We can't reconstruct past choices from Firebase state directly,
-            // so this is a fallback. Real history is built during play.
-            roundHistory[i] = roundHistory[i] || {
-                p1Choice: round.optionA,
-                p2Choice: round.optionA,
-                optionA: round.optionA,
-                optionB: round.optionB,
-                matched: true
-            };
-        }
-    }
-}
+
 
 function animateCount(elementId, from, to, suffix = '') {
     const el = $(elementId);
