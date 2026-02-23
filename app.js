@@ -331,7 +331,7 @@ function showRound() {
 
     // Reset choice state
     const myData = gameState[myRole];
-    hasChosen = myData && myData.choice !== null;
+    hasChosen = myData && myData.choice != null;
 
     $('choice-a').classList.remove('selected', 'disabled');
     $('choice-b').classList.remove('selected', 'disabled');
@@ -350,7 +350,7 @@ function showRound() {
     // Opponent status
     const oppRole = myRole === 'player1' ? 'player2' : 'player1';
     const oppData = gameState[oppRole];
-    if (oppData && oppData.choice !== null) {
+    if (oppData && oppData.choice != null) {
         $('opp-status-text').textContent = `${oppData.name} has locked in!`;
         document.querySelector('.opp-dot').classList.add('locked');
     } else if (oppData) {
